@@ -12,12 +12,62 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"socks5-go/install"
 	"socks5-go/internal/control"
 	"strings"
 	"time"
 )
 
-const installerURL = "https://raw.githubusercontent.com/Toby1GO/stest-relay/v1.1.0/install/node.sh"
+func (c *center) installerReady(w http.ResponseWriter) bool {
+	if c.bootstrapURL == "" || !install.Ready() {
+		http.Error(w, "中心缺少节点安装包或未配置 STEST_PUBLIC_URL，请使用内置安装包的中心版本", 503)
+		return false
+	}
+	return true
+}
+
+func (c *center) installCommand(role, id, key string) string {
+	return fmt.Sprintf(`bash -c 's=$(curl -kfsS --retry 3 --pinnedpubkey "$3" "$2/install/files/node.sh") && exec bash -s -- "$@" <<< "$s"' stest %s '%s' '%s' '%s' '%s'`, role, c.bootstrapURL, c.pin, id, key)
+}
+
+func (c *center) renewInstall(w http.ResponseWriter, r *http.Request) {
+	var in struct{ ID, Generation string }
+	if readBody(w, r, &in) != nil {
+		http.Error(w, "请求格式错误", 400)
+		return
+	}
+	n, ok := c.nodes[in.ID]
+	if !ok || digest(n.Secret) != in.Generation || n.Install == nil || n.Install.TicketHash == "" {
+		http.Error(w, "仅可为原配对中尚未完成安装的节点重新签发命令", 409)
+		return
+	}
+	if !c.installerReady(w) {
+		return
+	}
+	peer := c.nodes[n.Install.Peer]
+	if peer.Install == nil || peer.Install.Peer != n.ID || peer.Install.Tunnel != "" && peer.Install.Tunnel != n.Install.Tunnel {
+		http.Error(w, "配对关系已变更", 409)
+		return
+	}
+	key, err := nonce()
+	if err != nil {
+		http.Error(w, "生成凭据失败", 500)
+		return
+	}
+	en := *n.Install
+	en.TicketHash = digest(key)
+	en.Until = time.Now().UTC().Add(2 * time.Hour)
+	n.Install = &en
+	if c.commit(n, "已重新签发安装命令") != nil {
+		http.Error(w, "保存失败", 500)
+		return
+	}
+	role := "client"
+	if n.Role == "B" {
+		role = "server"
+	}
+	jsonOut(w, map[string]string{role: c.installCommand(role, n.ID, key)})
+}
 
 type enrollment struct {
 	Peer, Host, TicketHash, Tunnel, NodeKey, Certificate string
@@ -34,8 +84,7 @@ func (c *center) pair(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "节点标识已使用", 409)
 		return
 	}
-	if c.bootstrapURL == "" {
-		http.Error(w, "中心未配置安装入口（STEST_PUBLIC_URL）", 409)
+	if !c.installerReady(w) {
 		return
 	}
 	values := [5]string{}
@@ -57,7 +106,7 @@ func (c *center) pair(w http.ResponseWriter, r *http.Request) {
 		key := values[i]
 		n := managedNode{ID: id, Role: typ, Secret: digest(values[3+i]), Install: &enrollment{Peer: peer, Host: address, TicketHash: digest(key), NodeKey: values[3+i], Until: until, Tunnel: values[2]}, History: []entry{{time.Now().UTC(), "已登记，等待安装"}}}
 		c.nodes[id] = n
-		cmds[role] = fmt.Sprintf("curl -fsSL %s | bash -s -- %s '%s' '%s' '%s' '%s'", installerURL, role, c.bootstrapURL, c.pin, id, key)
+		cmds[role] = c.installCommand(role, id, key)
 	}
 	if e := control.SaveJSON(c.path, c.nodes); e != nil {
 		delete(c.nodes, p.Client)

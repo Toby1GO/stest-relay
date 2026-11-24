@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"socks5-go/install"
 	"socks5-go/internal/control"
 	"sort"
 	"strings"
@@ -105,6 +106,10 @@ func (c *center) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("X-Frame-Options", "DENY")
+	if strings.HasPrefix(r.URL.Path, "/install/files/") && (r.Method == "GET" || r.Method == "HEAD") {
+		install.Serve(w, r)
+		return
+	}
 	if (r.URL.Path == "/install/redeem" || r.URL.Path == "/install/certificate") && r.Method == "POST" {
 		c.bootstrap(w, r)
 		return
@@ -144,25 +149,67 @@ func (c *center) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.URL.Path == "/api/pair" && r.Method == "POST":
 		c.pair(w, r)
+	case r.URL.Path == "/api/nodes/install" && r.Method == "POST":
+		c.renewInstall(w, r)
+	case r.URL.Path == "/api/nodes/rename" && r.Method == "POST":
+		var in struct{ ID, Generation, Region string }
+		if readBody(w, r, &in) != nil || len([]rune(in.Region)) > 80 {
+			http.Error(w, "区域名称无效", 400)
+			return
+		}
+		n, ok := c.nodes[in.ID]
+		if !ok || digest(n.Secret) != in.Generation {
+			http.Error(w, "节点已变更，请刷新", 409)
+			return
+		}
+		n.Region = strings.TrimSpace(in.Region)
+		if c.commit(n, "已编辑区域名称") != nil {
+			http.Error(w, "保存失败", 500)
+			return
+		}
+		jsonOut(w, struct{}{})
 	case r.URL.Path == "/api/billing" && r.Method == "GET":
 		c.billing(w, r)
 	case r.URL.Path == "/api/rate" && r.Method == "POST":
 		c.setRate(w, r)
 	case r.URL.Path == "/api/nodes" && r.Method == "GET":
 		type row struct {
-			Probe probe `json:"probe"`
+			Usage          *control.Bytes `json:"usage,omitempty"`
+			Host           string         `json:"host,omitempty"`
+			PendingInstall bool           `json:"pendingInstall"`
+			Probe          probe          `json:"probe"`
 			managedNode
 			Generation string   `json:"generation"`
 			Status     observed `json:"status"`
 			Online     bool     `json:"online"`
 		}
 		rows := []row{}
+		usage := map[string]*control.Bytes{}
+		month := control.Month(time.Now())
+		for k, b := range c.book.Counters {
+			parts := strings.Split(k, "/")
+			if len(parts) != 4 || parts[1] != month {
+				continue
+			}
+			for _, id := range []string{parts[0], parts[2]} {
+				if usage[id] == nil {
+					usage[id] = &control.Bytes{}
+				}
+				usage[id].Up += b.Up
+				usage[id].Down += b.Down
+			}
+		}
 		for _, n := range c.nodes {
 			generation := digest(n.Secret)
+			host, pending := "", false
+			if n.Install != nil {
+				host = n.Install.Host
+				pending = n.Install.TicketHash != ""
+			}
 			n.Secret = ""
 			n.Install = nil
 			s := c.live[n.ID]
-			rows = append(rows, row{c.probes[n.ID], n, generation, s, time.Since(s.Seen) < 50*time.Second})
+			rows = append(rows, row{Usage: usage[n.ID], Host: host, PendingInstall: pending, Probe: c.probes[n.ID], managedNode: n, Generation: generation, Status: s, Online: time.Since(s.Seen) < 50*time.Second})
 		}
 		sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
 		jsonOut(w, rows)

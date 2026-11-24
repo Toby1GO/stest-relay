@@ -17,5 +17,8 @@ center-*-applied.json
 *.billing
 meter-monthly.json
 dist/
+install/payload/socks5-go-linux-*
+install/payload/SHA256SUMS
 *_test.go
+!internal/center/install_delivery_test.go
 *.admin

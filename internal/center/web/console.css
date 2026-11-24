@@ -197,6 +197,15 @@ dialog {max-height:calc(100dvh - 32px);overflow:auto}
 .asset {min-width:0;border:1px solid var(--line);border-radius:12px;padding:16px;overflow-wrap:anywhere}
 .asset dl {display:grid;grid-template-columns:auto minmax(0,1fr);gap:5px 12px}
 .asset dt {color:var(--muted)}.asset dd {margin:0}
+.asset dd {text-align:right;font-variant-numeric:tabular-nums}
+.asset .rule-head .badge {margin-left:auto}
+.traffic,.asset-buttons {display:grid;gap:8px;margin:12px 0;grid-template-columns:repeat(2,minmax(0,1fr))}
+.traffic div {border-radius:8px;background:#ecf4ff;color:#1957a0;padding:10px;text-align:center;font-size:12px}
+.traffic div+div,.asset-buttons button:first-child {background:#e5f6ed;color:#176942}
+.traffic b {display:block;font-size:15px}
+.asset-buttons {grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:0}
+.asset-buttons button:nth-child(2){background:#edf4ff;color:#1957a0}
+.asset-buttons .danger {background:#ffedf0;color:#982d47}
 .asset summary {cursor:pointer}.asset .actions {margin-top:12px}
 .nav-3::after {inset:3px;border-block:1px solid currentColor}
 @media(max-width:640px){.rail button{padding-inline:1px}.asset .actions button{flex:1}}

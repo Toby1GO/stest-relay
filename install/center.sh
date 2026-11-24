@@ -6,13 +6,18 @@ die(){ echo "$*" >&2; exit 1; }
 for tool in curl openssl python3 systemctl sha256sum; do command -v "$tool" >/dev/null || die "Missing: $tool"; done
 test -d /run/systemd/system || die 'Requires Linux with systemd'
 case $(uname -m) in x86_64) arch=amd64;; aarch64|arm64) arch=arm64;; *) die 'Unsupported architecture';; esac
-release=https://github.com/Toby1GO/stest-relay/releases/download/v1.1.0
+release=https://github.com/Toby1GO/stest-relay/releases/download/v1.2.0
 tmp=$(mktemp -d)
 trap 'rm -rf -- "$tmp"' EXIT
 fetch_binary(){
  local name="$1-linux-$arch"
- curl -fsSL --retry 3 "$release/$name" -o "$tmp/$name"
- curl -fsSL --retry 3 "$release/SHA256SUMS" -o "$tmp/sums"
+ if [[ -n ${STEST_PACKAGE_DIR:-} ]]; then
+  cp -- "$STEST_PACKAGE_DIR/$name" "$tmp/$name"
+  cp -- "$STEST_PACKAGE_DIR/SHA256SUMS" "$tmp/sums"
+ else
+  curl -fsSL --retry 3 "$release/$name" -o "$tmp/$name"
+  curl -fsSL --retry 3 "$release/SHA256SUMS" -o "$tmp/sums"
+ fi
  (cd "$tmp"; awk -v n="$name" '$2==n {print; found++} END{if(found!=1)exit 1}' sums > check; sha256sum -c check)
 }
 

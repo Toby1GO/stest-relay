@@ -25,9 +25,11 @@
 <p class="empty" v-if="!inventory.length">{{nodes.length?'没有匹配的节点':'暂无节点，可点击「接入节点」登记。'}}</p>
 <div class="inventory"><div class="asset" v-for="n in inventory" :key="n.id">
 <div class="rule-head"><span class="chip" :class="{exit:n.role==='B'}">{{n.role||'A'}}</span><b>{{n.region||n.id}}</b><span class="badge" :class="{off:!n.online}">{{n.online?'在线':'离线'}}</span></div>
-<small>{{n.id}}</small><dl><dt>角色</dt><dd>{{n.role==='B'?'B · 出口节点':'A · 入口节点'}}</dd><dt>探测地址</dt><dd>{{n.probe?.address||'—'}}</dd><dt>中心延迟</dt><dd>{{latency(n)}}</dd><dt>最近联系</dt><dd>{{date(n.status.seen)}}</dd><template v-if="n.role!=='B'"><dt>转发规则</dt><dd>{{n.desired?.plan.rules?.length||0}} 条</dd></template></dl>
+<small>{{n.id}} · {{n.role==='B'?'出口节点':'入口节点'}}</small><dl><dt>公网 IP</dt><dd>{{n.host||'未登记'}}</dd><dt>探测地址</dt><dd>{{n.probe?.address||'—'}}</dd><dt>中心延迟</dt><dd>{{latency(n)}}</dd><dt>最近联系</dt><dd>{{date(n.status.seen)}}</dd></dl>
+<div class="traffic"><div>↑ 本月上行<b>{{n.usage?volume(n.usage.up):'—'}}</b></div><div>↓ 本月下行<b>{{n.usage?volume(n.usage.down):'—'}}</b></div></div>
 <details><summary>应用记录</summary><ul><li v-for="h in n.history"><time>{{date(h.at)}}</time>　{{h.text}}</li></ul></details>
-<div class="actions"><button v-if="n.role!=='B'" @click="openRules(n)" :disabled="busy">查看转发规则</button><button v-else @click="page='用量账单'">查看用量账单</button><button class="danger" @click="removeNode(n)" :disabled="busy">删除节点</button></div></div></div></section></div>
+<button class="subtle" v-if="n.role!=='B'" @click="openRules(n)" :disabled="busy">转发规则 →</button><button class="subtle" v-else @click="page='用量账单'">用量账单 →</button>
+<div class="asset-buttons"><button :disabled="busy||!n.pendingInstall" @click="renewInstall(n)">{{n.pendingInstall?'安装':n.host?'已安装':'手动接入'}}</button><button :disabled="busy" @click="renameNode(n)">编辑</button><button class="danger" @click="removeNode(n)" :disabled="busy">删除</button></div></div></div></section></div>
 <main class="rules-page" v-if="page==='转发规则'"><article>
 <section class="node-bar"><label>入口节点 A<select :value="id" :disabled="busy||!entries.length" @change="select(entries.find(n=>n.id===$event.target.value));$event.target.value=id"><option v-for="n in entries" :key="n.id" :value="n.id">{{n.region||n.id}} · {{n.id}}</option></select></label><template v-if="node"><span class="state">{{node.online?'在线':'离线'}} · {{status}}</span><small>出口 B　{{node.status.b||'尚未上报'}}</small><small>最近联系　{{date(node.status.seen)}}</small></template></section>
 <section v-if="!node">暂无入口节点，请先接入 A。</section><template v-else>
@@ -50,9 +52,9 @@
 <dialog ref="importer"><h2>导入端口映射</h2><p>目标：{{id}}。选择导出的 JSON 文件，或粘贴规则数组。同端口会提示覆盖，其余映射保留。</p>
 <label>选择文件<input type="file" accept=".json,application/json" @change="readRulesFile"></label><fieldset class="format-box"><legend>格式转换</legend><label>外部格式 · 每行一条<textarea rows="3" v-model="convertText" placeholder="192.0.2.10:8080|示例客户|12001&#10;12002:node.example:443"></textarea></label><small>目标地址:端口 | 客户名称 | 入口端口，或 入口端口:目标地址:目标端口。</small><button type="button" :disabled="reading||!convertText.trim()" @click="convertRules">转换为 JSON</button></fieldset>
 <label>规则 JSON<textarea v-model="importText" rows="7" placeholder='[{"port":11003,"IP":"tw.example:1080","udp":true}]'></textarea></label><p v-if="importError" role="alert" class="error">{{importError}}</p><div class="actions"><button class="primary" :disabled="!importText.trim()||reading" @click="mergeImport">导入到草稿</button><button @click="$refs.importer.close()">取消</button></div></dialog>
-<dialog ref="pairDialog" @close="pairCmd=null"><h2>安装一对节点</h2>
+<dialog ref="pairDialog" @close="pairCmd=null"><h2>{{pairCmd && Object.keys(pairCmd).length===1?'节点安装命令':'安装一对节点'}}</h2>
 <form v-if="!pairCmd" @submit.prevent="createPair"><p>先在 server 上运行第一条命令，再在 client 上运行第二条。证书和计量配置自动同步。</p><label>server 标识<input required pattern="[a-zA-Z0-9_\-]{1,64}" v-model.trim="pair.Server" placeholder="b02"></label><label>server 公网 IPv4<input required v-model.trim="pair.ServerIP" placeholder="198.51.100.2"></label><label>client 标识<input required pattern="[a-zA-Z0-9_\-]{1,64}" v-model.trim="pair.Client" placeholder="a02"></label><label>client 公网 IPv4<input required v-model.trim="pair.ClientIP" placeholder="192.0.2.2"></label><button class="primary" :disabled="busy">生成两条安装命令</button></form>
-<template v-else><p>命令包含各自的安装凭据，仅显示一次，2 小时内使用。安装完成后凭据自动失效。</p><div v-for="(role,i) in ['server','client']"><h3>{{i+1}}. 在 {{role}} 上运行</h3><pre>{{pairCmd[role]}}</pre><button @click="copyInstall(role)">{{copied===role?'已复制':'复制命令'}}</button></div></template><p class="error">{{pairError}}</p><button :disabled="busy" @click="$refs.pairDialog.close()">关闭</button></dialog>
+<template v-else><p>节点从中心下载安装包。请在 2 小时内使用；如遗失或过期，可在「全部节点 → 安装」重新签发。安装完成后凭据自动失效。</p><div v-for="role in ['server','client'].filter(r=>pairCmd[r])"><h3>在 {{role}} 上运行</h3><pre>{{pairCmd[role]}}</pre><button @click="copyInstall(role)">{{copied===role?'已复制':'复制命令'}}</button></div></template><p class="error">{{pairError}}</p><button :disabled="busy" @click="$refs.pairDialog.close()">关闭</button></dialog>
 <dialog ref="dialog" @close="token=''"><h2>接入节点</h2><form v-if="!token" @submit.prevent="register"><label>节点角色<select v-model="newRole"><option value="A">A · 入口</option><option value="B">B · 出口</option></select></label><label>节点标识<input required pattern="[a-zA-Z0-9_\-]{1,64}" v-model="newID"></label><label>区域名称<input maxlength="80" v-model="region"></label><button class="primary" :disabled="busy">创建节点</button></form>
 <template v-else><p>将以下三行加入对应节点的配置。密钥仅显示一次。</p><pre>{{credentials}}</pre></template><p class="error">{{regError}}</p><button @click="$refs.dialog.close()" :disabled="busy">关闭</button></dialog></div>
 <script>
@@ -174,6 +176,16 @@ Vue.createApp({
       if(prompt('删除后将撤销密钥并移除全部映射。输入节点标识确认：'+n.id)!==n.id)return;
       this.busy=true;this.error='';
       try{await api('/api/nodes/delete',{id:n.id,generation:n.generation,base:n.desired?.version||''});await this.refresh()}catch(e){this.error=e.message}finally{this.busy=false}
+    },
+    async renewInstall(n){
+      if(!confirm('为 '+n.id+' 生成新命令？该节点之前的安装命令将立即失效。'))return;
+      this.busy=true;this.error='';this.pairError='';this.copied='';
+      try{this.pairCmd=await api('/api/nodes/install',{id:n.id,generation:n.generation});this.$refs.pairDialog.showModal()}catch(e){this.error=e.message}finally{this.busy=false}
+    },
+    async renameNode(n){
+      const region=prompt('区域名称（节点标识 '+n.id+' 保持不变）',n.region||'');if(region==null)return;
+      this.busy=true;this.error='';
+      try{await api('/api/nodes/rename',{id:n.id,generation:n.generation,region});await this.refresh()}catch(e){this.error=e.message}finally{this.busy=false}
     },
     openNode(n){if(n.role==='B'){this.inventorySearch='';this.page='全部节点'}else this.openRules(n)},
     openRules(n){if(!this.busy&&n.role!=='B'){this.select(n);if(this.id===n.id)this.page='转发规则'}},

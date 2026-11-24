@@ -6,13 +6,12 @@ die(){ echo "$*" >&2; exit 1; }
 for tool in curl openssl python3 systemctl sha256sum; do command -v "$tool" >/dev/null || die "Missing: $tool"; done
 test -d /run/systemd/system || die 'Requires Linux with systemd'
 case $(uname -m) in x86_64) arch=amd64;; aarch64|arm64) arch=arm64;; *) die 'Unsupported architecture';; esac
-release=https://github.com/Toby1GO/stest-relay/releases/download/v1.1.0
 tmp=$(mktemp -d)
 trap 'rm -rf -- "$tmp"' EXIT
 fetch_binary(){
  local name="$1-linux-$arch"
- curl -fsSL --retry 3 "$release/$name" -o "$tmp/$name"
- curl -fsSL --retry 3 "$release/SHA256SUMS" -o "$tmp/sums"
+ curl -kfsS --pinnedpubkey "$pin" --retry 3 "$url/install/files/$name" -o "$tmp/$name"
+ curl -kfsS --pinnedpubkey "$pin" --retry 3 "$url/install/files/SHA256SUMS" -o "$tmp/sums"
  (cd "$tmp"; awk -v n="$name" '$2==n {print; found++} END{if(found!=1)exit 1}' sums > check; sha256sum -c check)
 }
 
@@ -21,7 +20,12 @@ role=$1;url=$2;pin=$3;id=$4;ticket=$5
 case $role in server) unit=stest-exit.service;mode=server;; client) unit=stest-agent.service;mode='client -config proxy.properties forward';; *)die 'Invalid role';;esac
 [[ $url == https://* && $pin == sha256//* && $ticket =~ ^[0-9a-f]{48}$ && $id =~ ^[a-zA-Z0-9_-]{1,64}$ ]] || die 'Invalid installation parameters'
 dir=/opt/stest-$role
-[[ ! -e "$dir" && ! -e /root/stest/proxy.properties ]] && ! systemctl cat "$unit" >/dev/null 2>&1 || die 'Existing installation found; stopped without replacing files'
+for path in "$dir" /root/stest/proxy.properties; do
+ [[ ! -e "$path" && ! -L "$path" ]] || die "Cannot install $role: $path already exists. No files replaced."
+done
+if systemctl cat "$unit" >/dev/null 2>&1; then
+ die "Cannot install $role: $unit already exists. Inspect it with: systemctl status $unit --no-pager"
+fi
 fetch_binary socks5-go
 printf '{"id":"%s","role":"%s"}' "$id" "$role" > "$tmp/request"
 # The admin-issued SPKI pin authenticates even a self-signed center on first contact.
