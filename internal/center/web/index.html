@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>转发服务控制台</title>
+<link rel="stylesheet" href="/console.css">
+<script src="/vue.js"></script>
+<body><div id="app" v-cloak>
+<div class="shell">
+<nav class="rail" aria-label="主导航"><div class="brand"><i class="mark" aria-hidden="true"></i>STest</div><div class="rail-label">工作空间</div>
+<button v-for="(tab,i) in tabs" :key="tab" :class="{current:page===tab}" :aria-current="page===tab?'page':null" @click="page=tab"><i class="nav-icon" :class="'nav-'+i"></i>{{tab}}</button>
+<div class="rail-foot"><span class="avatar">C</span><div>管理中心<small>管理员工作区</small></div></div></nav>
+<div class="workspace"><div class="topline"><span>工作空间 <em>/</em> <b>{{page}}</b></span><time v-if="currentMonth">更新于 {{new Date(now).toLocaleTimeString('zh-CN',{hour12:false})}}</time></div>
+<header><h1>{{page}}</h1><div class="actions"><button @click="openRegister">手动接入</button><button class="primary" @click="openPair">＋ 安装一对节点</button></div></header>
+<div v-if="error" role="alert" class="error banner">{{error}}</div>
+<div class="summary" v-if="page==='网络总览'"><div v-for="(k,i) in metrics" :key="k[0]"><span class="stat-icon" :class="'ic-'+i" aria-hidden="true">{{['▦','◉','⇄','◷'][i]}}</span><small>{{k[0]}}</small><strong>{{currentMonth?k[1]:'—'}}</strong></div></div>
+<div class="dashboard overview" v-if="page==='网络总览'">
+<section class="topology"><div class="heading"><div><h2>网络拓扑</h2><small>中心至节点 · TCP 建连探测</small></div><span class="tag">15 秒间隔</span></div>
+<div class="canvas"><div class="topology-layout" v-if="nodes.length"><div class="hub"><span class="chip center-chip">C</span><b>管理中心</b></div>
+<div class="branches"><div v-for="n in nodes" :key="n.id" class="branch" :class="{idle:!n.online}"><div class="path"></div><button class="endpoint" @click="openNode(n)"><span class="chip" :class="{exit:n.role==='B'}">{{n.role||'A'}}</span><span class="endpoint-name"><b>{{n.region||n.id}}</b><small>{{n.role==='B'?'出口':'入口'}}节点</small></span><span class="ms">{{latency(n)}}</span></button></div></div></div><p v-else class="empty">{{currentMonth?'接入节点后即可查看探测结果。':'正在读取节点…'}}</p></div></section>
+<section class="activity"><div class="heading"><div><h2>最近动态</h2><small>节点接入与配置发布</small></div></div><ol class="timeline"><li v-for="e in recent" :key="e.id+e.at+e.text"><time>{{date(e.at)}}</time><b>{{e.region||e.id}}</b><span>{{e.text}}</span></li></ol><p v-if="!recent.length" class="empty">暂无操作记录</p></section>
+<section class="fleet"><div class="heading"><h2>节点状态</h2><button class="subtle" @click="page='全部节点'">全部节点 →</button></div><div class="table-scroll"><table><thead><tr><th>节点名称</th><th>角色</th><th>探测地址</th><th>延迟</th><th>心跳状态</th></tr></thead><tbody><tr v-for="n in nodes" :key="n.id"><td data-label="节点名称"><button class="link" @click="openNode(n)">{{n.region||n.id}}</button><small>{{n.id}}</small></td><td data-label="角色">{{n.role==='B'?'B · 出口':'A · 入口'}}</td><td data-label="探测地址" class="mono">{{n.probe?.address||'—'}}</td><td data-label="延迟">{{latency(n)}}</td><td data-label="心跳状态"><span class="badge" :class="{off:!n.online}">{{n.online?'在线':'离线'}}</span></td></tr></tbody></table></div></section></div>
+<div class="dashboard" v-if="page==='用量账单'"><section><div class="heading"><div><h2>映射月账单</h2><small>北京时间 · 上下行合计 · 1 GiB = 1,073,741,824 字节</small></div><input aria-label="账单月份" type="month" v-model="month" @change="refresh"></div>
+<div class="bill-mobile-sort" role="group" aria-label="流量排序"><small>排序</small><template v-for="(label,key) in billColumns" :key="key"><button type="button" class="sort-btn" :aria-pressed="billSort===key" :aria-label="label+(billSort===key?(billDesc?'降序':'升序'):'排序')" @click="sortBills(key)">{{label}} <span aria-hidden="true">{{billSort===key?(billDesc?'↓':'↑'):'↕'}}</span></button></template></div>
+<div class="table-scroll"><table><thead><tr><th>A 节点 / 入口</th><th v-for="(label,key) in billColumns" :key="key" :aria-sort="billSort===key?(billDesc?'descending':'ascending'):'none'"><button type="button" class="sort-btn" @click="sortBills(key)">{{label}} <span aria-hidden="true">{{billSort===key?(billDesc?'↓':'↑'):'↕'}}</span></button></th><th>元 / GiB</th><th>费用</th></tr></thead><tbody><tr v-for="r in sortedBills" :key="r.key"><td data-label="A 节点 / 入口"><b>{{r.key.split('/')[1]}}</b> / {{r.key.split('/')[2]}}</td><td data-label="上行">{{volume(r.up)}}</td><td data-label="下行">{{volume(r.down)}}</td><td data-label="合计">{{volume(r.up+r.down)}}</td><td data-label="元 / GiB"><button :disabled="month!==currentMonth" @click="price(r)">{{r.rate==null?'设置单价':(r.rate/100).toFixed(2)}}</button></td><td data-label="费用">{{r.rate==null?'待定价':'¥ '+r.fee}}</td></tr></tbody></table></div><p v-if="!bills.length">该月份暂无用量记录。</p></section></div>
+<div class="dashboard" v-if="page==='全部节点'"><section>
+<div class="heading"><div><h2>节点目录</h2><small>{{nodes.length}} 台节点 · 包含 A 入口与 B 出口</small></div><input type="search" aria-label="搜索全部节点" placeholder="搜索区域或节点标识" v-model="inventorySearch"></div>
+<p class="empty" v-if="!inventory.length">{{nodes.length?'没有匹配的节点':'暂无节点，可点击「接入节点」登记。'}}</p>
+<div class="inventory"><div class="asset" v-for="n in inventory" :key="n.id">
+<div class="rule-head"><span class="chip" :class="{exit:n.role==='B'}">{{n.role||'A'}}</span><b>{{n.region||n.id}}</b><span class="badge" :class="{off:!n.online}">{{n.online?'在线':'离线'}}</span></div>
+<small>{{n.id}}</small><dl><dt>角色</dt><dd>{{n.role==='B'?'B · 出口节点':'A · 入口节点'}}</dd><dt>探测地址</dt><dd>{{n.probe?.address||'—'}}</dd><dt>中心延迟</dt><dd>{{latency(n)}}</dd><dt>最近联系</dt><dd>{{date(n.status.seen)}}</dd><template v-if="n.role!=='B'"><dt>转发规则</dt><dd>{{n.desired?.plan.rules?.length||0}} 条</dd></template></dl>
+<details><summary>应用记录</summary><ul><li v-for="h in n.history"><time>{{date(h.at)}}</time>　{{h.text}}</li></ul></details>
+<div class="actions"><button v-if="n.role!=='B'" @click="openRules(n)" :disabled="busy">查看转发规则</button><button v-else @click="page='用量账单'">查看用量账单</button><button class="danger" @click="removeNode(n)" :disabled="busy">删除节点</button></div></div></div></section></div>
+<main class="rules-page" v-if="page==='转发规则'"><article>
+<section class="node-bar"><label>入口节点 A<select :value="id" :disabled="busy||!entries.length" @change="select(entries.find(n=>n.id===$event.target.value));$event.target.value=id"><option v-for="n in entries" :key="n.id" :value="n.id">{{n.region||n.id}} · {{n.id}}</option></select></label><template v-if="node"><span class="state">{{node.online?'在线':'离线'}} · {{status}}</span><small>出口 B　{{node.status.b||'尚未上报'}}</small><small>最近联系　{{date(node.status.seen)}}</small></template></section>
+<section v-if="!node">暂无入口节点，请先接入 A。</section><template v-else>
+<p class="error" v-if="node.status.error">{{node.status.error}}</p>
+<p v-if="!form" class="empty">等待该入口节点首次同步映射。</p><section v-if="form"><h2>端口映射</h2><form @submit.prevent="publish"><fieldset :disabled="busy" style="border:0;padding:0">
+<p class="hint">批量修改只写入当前节点的草稿，发布后生效。启用不会延长到期时间。</p>
+<div class="bulkbar"><label><input type="checkbox" :checked="form.rules.length>0 && selected.size===form.rules.length" :indeterminate="selected.size>0 && selected.size<form.rules.length" @change="selected=new Set($event.target.checked?form.rules:[])">全选</label><small>已选 {{selected.size}} / {{form.rules.length}}</small>
+<button type="button" @click="openImport">导入</button><button type="button" :disabled="!form.rules.length" @click="exportRules">{{selected.size?'导出所选':'导出全部'}}</button>
+<button type="button" :disabled="!selected.size||!node.status.portPolicy" @click="bulk('enable')">启用</button><button type="button" :disabled="!selected.size||!node.status.portPolicy" @click="bulk('disable')">关闭</button><button type="button" class="danger" :disabled="!selected.size" @click="bulk('delete')">删除</button></div>
+<p v-if="batchMsg" role="status" class="hint">{{batchMsg}}</p>
+<div class="rule-card" v-for="(r,i) in form.rules" :key="i">
+<div class="rule-head"><label class="pick-rule"><input type="checkbox" :aria-label="'选择端口 '+(r.port||'待设置')" :checked="selected.has(r)" @change="$event.target.checked?selected.add(r):selected.delete(r)"></label><b>端口 {{r.port||'待设置'}}</b><span class="badge" :class="{off:restricted(r)}">{{ruleState(r)}}</span><button type="button" @click="selected.delete(r);form.rules.splice(i,1)">移除</button></div>
+<div class="fields rule-fields"><label>入口端口<input type="number" min="1" max="65535" required v-model.number="r.port"></label><label>目标地址和端口<input required v-model.trim="r.target" placeholder="tw-node.example:1080"></label><label>到期时间 · 本地时间<input aria-label="到期时间" type="datetime-local" :value="localDate(r.expiresAt)" @input="setExpiry(r,$event.target.value)" :disabled="!node.status.portPolicy"></label>
+<label>客户名称<input maxlength="100" v-model.trim="r.customer" placeholder="选填"></label><label>备注<input maxlength="500" v-model="r.remark" placeholder="选填，如用途或续费说明"></label></div>
+<div class="toggles"><label><input type="checkbox" v-model="r.udp"> UDP 转发</label><label><input type="checkbox" v-model="r.disabled" :disabled="!node.status.portPolicy"> 禁用此映射</label><small>{{r.expiresAt?'到期 '+date(r.expiresAt):'长期有效'}}</small></div></div>
+<button type="button" @click="form.rules.push({port:null,target:'',udp:false})">＋ 添加映射</button>
+<h3>节点 UDP 设置</h3><div class="pair"><label>公网通告 IP<input v-model.trim="form.ip"></label><label>UDP 端口范围<input v-model.trim="form.ports" required></label></div>
+<div class="actions"><button class="primary" :disabled="!dirty">发布配置</button><button type="button" @click="discard">重新载入</button><small>{{dirty?'有未发布的修改':''}} {{base!==node.desired.version?'中心版本已更新，请重新载入':''}}</small></div></fieldset></form></section>
+</template></article></main></div></div>
+<dialog ref="importer"><h2>导入端口映射</h2><p>目标：{{id}}。选择导出的 JSON 文件，或粘贴规则数组。同端口会提示覆盖，其余映射保留。</p>
+<label>选择文件<input type="file" accept=".json,application/json" @change="readRulesFile"></label><fieldset class="format-box"><legend>格式转换</legend><label>外部格式 · 每行一条<textarea rows="3" v-model="convertText" placeholder="192.0.2.10:8080|示例客户|12001&#10;12002:node.example:443"></textarea></label><small>目标地址:端口 | 客户名称 | 入口端口，或 入口端口:目标地址:目标端口。</small><button type="button" :disabled="reading||!convertText.trim()" @click="convertRules">转换为 JSON</button></fieldset>
+<label>规则 JSON<textarea v-model="importText" rows="7" placeholder='[{"port":11003,"IP":"tw.example:1080","udp":true}]'></textarea></label><p v-if="importError" role="alert" class="error">{{importError}}</p><div class="actions"><button class="primary" :disabled="!importText.trim()||reading" @click="mergeImport">导入到草稿</button><button @click="$refs.importer.close()">取消</button></div></dialog>
+<dialog ref="pairDialog" @close="pairCmd=null"><h2>安装一对节点</h2>
+<form v-if="!pairCmd" @submit.prevent="createPair"><p>先在 server 上运行第一条命令，再在 client 上运行第二条。证书和计量配置自动同步。</p><label>server 标识<input required pattern="[a-zA-Z0-9_\-]{1,64}" v-model.trim="pair.Server" placeholder="b02"></label><label>server 公网 IPv4<input required v-model.trim="pair.ServerIP" placeholder="198.51.100.2"></label><label>client 标识<input required pattern="[a-zA-Z0-9_\-]{1,64}" v-model.trim="pair.Client" placeholder="a02"></label><label>client 公网 IPv4<input required v-model.trim="pair.ClientIP" placeholder="192.0.2.2"></label><button class="primary" :disabled="busy">生成两条安装命令</button></form>
+<template v-else><p>命令包含各自的安装凭据，仅显示一次，2 小时内使用。安装完成后凭据自动失效。</p><div v-for="(role,i) in ['server','client']"><h3>{{i+1}}. 在 {{role}} 上运行</h3><pre>{{pairCmd[role]}}</pre><button @click="copyInstall(role)">{{copied===role?'已复制':'复制命令'}}</button></div></template><p class="error">{{pairError}}</p><button :disabled="busy" @click="$refs.pairDialog.close()">关闭</button></dialog>
+<dialog ref="dialog" @close="token=''"><h2>接入节点</h2><form v-if="!token" @submit.prevent="register"><label>节点角色<select v-model="newRole"><option value="A">A · 入口</option><option value="B">B · 出口</option></select></label><label>节点标识<input required pattern="[a-zA-Z0-9_\-]{1,64}" v-model="newID"></label><label>区域名称<input maxlength="80" v-model="region"></label><button class="primary" :disabled="busy">创建节点</button></form>
+<template v-else><p>将以下三行加入对应节点的配置。密钥仅显示一次。</p><pre>{{credentials}}</pre></template><p class="error">{{regError}}</p><button @click="$refs.dialog.close()" :disabled="busy">关闭</button></dialog></div>
+<script>
+function validEndpoint(target){const m=/^(?:\[[0-9a-fA-F:.%]+\]|[^:\s/\\@?#\[\]]+):(\d+)$/.exec(target);return !!m && +m[1]>=1 && +m[1]<=65535}
+function convertLines(text){
+  const rules=[],seen=new Set();
+  if(text.length>1024*1024)throw Error('文本不能超过 1 MiB');
+  for(const [i,raw] of text.split(/\r?\n/).entries()){
+    const line=raw.trim();if(!line)continue;
+    const fail=msg=>{throw Error('第 '+(i+1)+' 行：'+msg)};
+    let value,IP,customer='';
+    if(line.includes('|')){
+      const parts=line.split('|').map(v=>v.trim());
+      if(parts.length!==3)fail('应为 目标地址:端口 | 客户名称 | 入口端口');
+      [IP,customer,value]=parts;
+    }else{
+      const colon=line.indexOf(':');if(colon<1)fail('应为 入口端口:目标地址:目标端口');
+      value=line.slice(0,colon).trim();IP=line.slice(colon+1).trim()
+    }
+    const port=Number(value);
+    if(!/^\d+$/.test(value)||port<1||port>65535)fail('入口端口须为 1–65535');
+    if(!validEndpoint(IP))fail('目标地址或目标端口无效');
+    if([...customer].length>100)fail('客户名称超过 100 字');
+    if(seen.has(port))fail('入口端口重复：'+port);
+    if(rules.length>=2048)fail('最多 2048 条');
+    seen.add(port);rules.push({port,IP,customer,remark:'',udp:false})
+  }
+  if(!rules.length)throw Error('请输入待转换的规则');
+  return {rules}
+}
+async function api(path, data) {
+  const opts = data === undefined ? {} : {method:'POST',headers:{'Content-Type':'application/json','X-Center-Request':'1'},body:JSON.stringify(data)};
+  const response = await fetch(path, opts);
+  if (!response.ok) throw Error((await response.text()).trim());
+  return response.json();
+}
+Vue.createApp({
+  data:()=>({tabs:['网络总览','转发规则','全部节点','用量账单'],page:'网络总览',bills:[],billSort:'total',billDesc:true,billColumns:{up:'上行',down:'下行',total:'合计'},month:'',currentMonth:'',newRole:'A',pair:{},pairCmd:null,pairError:'',copied:'',nodes:[],inventorySearch:'',selected:new Set(),batchMsg:'',convertText:'',importText:'',importError:'',reading:false,fileRead:0,now:Date.now(),id:'',base:'',original:'',form:null,error:'',busy:false,sequence:0,timer:null,newID:'',region:'',regError:'',token:''}),
+  computed:{
+    sortedBills(){
+      const amount=r=>this.billSort==='total'?r.up+r.down:r[this.billSort];
+      return [...this.bills].sort((a,b)=>(amount(a)-amount(b))*(this.billDesc?-1:1)||a.key.localeCompare(b.key))
+    },
+    recent(){return this.nodes.flatMap(n=>(n.history||[]).map(h=>({...h,id:n.id,region:n.region}))).sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)).slice(0,3)},
+    entries(){return this.nodes.filter(n=>!n.role||n.role==='A')},
+    inventory(){const q=this.inventorySearch.trim().toLowerCase();return this.nodes.filter(n=>(n.id+' '+n.region).toLowerCase().includes(q))},
+    metrics(){const rules=this.nodes.flatMap(n=>n.desired?.plan.rules||[]);return [['已登记节点',this.nodes.length],['在线节点',this.nodes.filter(n=>n.online).length],['端口映射',rules.length],['禁用或已到期',rules.filter(r=>this.restricted(r)).length]]},
+    node(){return this.entries.find(n=>n.id===this.id)},
+    dirty(){return this.form && JSON.stringify(this.form)!==this.original},
+    credentials(){return ['center.url='+location.origin,'center.node-id='+this.newID,'center.node-token='+this.token].join('\n')},
+    status(){if(this.node.role==='B')return this.node.online?'采集中':'等待上报';const {desired,status}=this.node;if(!desired)return '等待接入';if(status.error && status.tried===desired.version)return '应用失败';return status.applied===desired.version?'配置已生效':'等待 A 应用'}
+  },
+  methods:{
+    sortBills(key){this.billDesc=this.billSort===key?!this.billDesc:true;this.billSort=key},
+    openImport(){this.convertText='';this.importText='';this.importError='';this.reading=false;this.fileRead++;this.$refs.importer.querySelector('input').value='';this.$refs.importer.showModal()},
+    async readRulesFile(e){
+      const file=e.target.files[0],ticket=++this.fileRead;this.reading=false;if(!file)return;
+      this.importText='';this.importError='';this.reading=true;
+      try{if(file.size>1024*1024)throw Error('文件不能超过 1 MiB');const text=await file.text();if(ticket===this.fileRead)this.importText=text}
+      catch(err){if(ticket===this.fileRead)this.importError=err.message}finally{if(ticket===this.fileRead)this.reading=false}
+    },
+    convertRules(){
+      try{const result=convertLines(this.convertText);
+        if(this.importText.trim()&&!confirm('用转换结果替换当前 JSON 预览？'))return;
+        this.importText=JSON.stringify(result,null,2);this.importError=''
+      }catch(e){this.importError=e.message}
+    },
+    mergeImport(){
+      if(!this.form||this.busy)return;
+      try{
+        const input=JSON.parse(this.importText.replace(/^\uFEFF/,''));
+        const rules=Array.isArray(input)?input:input?.rules;
+        if(!Array.isArray(rules)||!rules.length||rules.length>2048)throw Error('请提供 1–2048 条规则');
+        const incoming=new Map();
+        for(const [i,r] of rules.entries()){
+          const fail=msg=>{throw Error('第 '+(i+1)+' 行：'+msg)};
+          if(!r||!Number.isInteger(r.port)||r.port<1||r.port>65535)fail('入口端口须为 1–65535');
+          if(incoming.has(r.port))fail('文件内端口重复：'+r.port);
+          if(r.IP!==undefined && r.target!==undefined && r.IP!==r.target)fail('IP 与旧字段 target 不一致');
+          const target=typeof (r.IP??r.target)==='string'?(r.IP??r.target).trim():'';
+          if(!validEndpoint(target))fail('目标格式应为 host:port');
+          for(const k of ['disabled','udp'])if(r[k]!==undefined&&typeof r[k]!=='boolean')fail(k+' 须为 true 或 false');
+          const item={port:r.port,target,udp:r.udp??false,disabled:r.disabled??false};
+          for(const [k,max] of [['customer',100],['remark',500]]){if(r[k]!==undefined){if(typeof r[k]!=='string'||[...r[k]].length>max)fail(k+' 字段过长或不是文字');item[k]=r[k]}}
+          if(r.expiresAt!=null){if(typeof r.expiresAt!=='string'||!/(Z|[+-]\d\d:\d\d)$/i.test(r.expiresAt)||!Number.isFinite(Date.parse(r.expiresAt)))fail('到期时间须为带时区的 ISO 日期');item.expiresAt=new Date(r.expiresAt).toISOString()}
+          if((item.disabled||item.expiresAt)&&!this.node.status.portPolicy)fail('该节点不支持端口策略');
+          incoming.set(r.port,item)
+        }
+        const existing=new Set(this.form.rules.map(r=>r.port));
+        const overlap=[...incoming.keys()].filter(port=>existing.has(port));
+        if(this.form.rules.length+incoming.size-overlap.length>2048)throw Error('合并后超过 2048 条');
+        if(overlap.length&&!confirm('覆盖当前草稿的 '+overlap.length+' 个同名端口（'+overlap.slice(0,8).join('、')+'）？'))return;
+        this.form.rules=[...this.form.rules.map(r=>incoming.get(r.port)||r),...[...incoming.values()].filter(r=>!existing.has(r.port))];
+        this.selected.clear();this.batchMsg='已导入 '+incoming.size+' 条到草稿，其中覆盖 '+overlap.length+' 条。';this.$refs.importer.close()
+      }catch(e){this.importError=e instanceof SyntaxError?'JSON 格式错误，请检查括号和逗号。':e.message}
+    },
+    exportRules(){
+      const rules=this.form.rules.filter(r=>!this.selected.size||this.selected.has(r)).map(({target,...rest})=>({...rest,IP:target}));
+      const blob=new Blob([JSON.stringify({rules},null,2)],{type:'application/json'});
+      const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=this.id+'-rules.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)
+    },
+    bulk(action){
+      const count=this.selected.size;if(!count)return;
+      if(action==='delete'){
+        if(!confirm('从 '+this.id+' 的草稿删除选中的 '+count+' 条映射？'))return;
+        this.form.rules=this.form.rules.filter(r=>!this.selected.has(r));this.selected.clear()
+      }else{if(!this.node.status.portPolicy)return;for(const r of this.selected)r.disabled=action==='disable'}
+      this.batchMsg='已在草稿中'+({delete:'删除',enable:'启用',disable:'关闭'}[action])+count+' 条。'
+    },
+    latency(n){if(!n.online||!n.probe?.address)return '—';return n.probe.ok?n.probe.ms.toFixed(1)+' ms':'连接失败'},
+    volume(n){if(n<1024)return n+' B';if(n<1048576)return (n/1024).toFixed(2)+' KiB';if(n<1073741824)return (n/1048576).toFixed(2)+' MiB';return (n/1073741824).toFixed(3)+' GiB'},
+    async price(r){const v=prompt('本月人民币元 / GiB（调整后按新单价重算整月）',r.rate==null?'':(r.rate/100).toFixed(2));if(v==null)return;if(!/^\d+(\.\d{1,2})?$/.test(v)){this.error='请输入非负金额，最多两位小数';return}try{await api('/api/rate',{key:r.key,cents:Math.round(Number(v)*100)});await this.refresh()}catch(e){this.error=e.message}},
+    restricted(r){return r.disabled || (r.expiresAt && Date.parse(r.expiresAt)<=this.now)},
+    ruleState(r){return r.disabled?'已禁用':this.restricted(r)?'已到期':'已启用'},
+    localDate(s){if(!s)return '';const d=new Date(s);return new Date(+d-d.getTimezoneOffset()*60000).toISOString().slice(0,16)},
+    setExpiry(r,s){if(!s){delete r.expiresAt;return}const d=new Date(s);if(!Number.isNaN(+d))r.expiresAt=d.toISOString()},
+    async removeNode(n){
+      if(prompt('删除后将撤销密钥并移除全部映射。输入节点标识确认：'+n.id)!==n.id)return;
+      this.busy=true;this.error='';
+      try{await api('/api/nodes/delete',{id:n.id,generation:n.generation,base:n.desired?.version||''});await this.refresh()}catch(e){this.error=e.message}finally{this.busy=false}
+    },
+    openNode(n){if(n.role==='B'){this.inventorySearch='';this.page='全部节点'}else this.openRules(n)},
+    openRules(n){if(!this.busy&&n.role!=='B'){this.select(n);if(this.id===n.id)this.page='转发规则'}},
+    date(s){return s&&!s.startsWith('0001')?new Date(s).toLocaleString():'尚无'},
+    load(){this.selected=new Set();this.batchMsg='';this.$refs.importer?.close();const v=this.node?.desired;this.base=v?.version||'';this.form=v?{rules:v.plan.rules||[],ip:v.plan.ip,ports:v.plan.ports}:null;this.original=JSON.stringify(this.form);this.form=JSON.parse(this.original)},
+    discard(){if(!this.dirty||confirm('放弃未发布的修改？'))this.load()},
+    select(n){if(!n||n.role==='B'||this.busy||this.id===n.id || (this.dirty&&!confirm('放弃未发布的修改？')))return;this.id=n.id;this.load()},
+    async refresh(){const seq=++this.sequence;try{const [nodes,bill]=await Promise.all([api('/api/nodes'),api('/api/billing?month='+encodeURIComponent(this.month))]);if(seq!==this.sequence)return;this.bills=bill.rows;this.month=bill.month;this.currentMonth=bill.current;this.nodes=nodes;this.now=Date.now();if(!this.node){this.id=this.entries[0]?.id||'';this.load()}if(!this.dirty&&this.node?.desired?.version!==this.base)this.load()}catch(e){this.error=e.message}},
+    async publish(){if(!this.node||!this.form||this.busy||(!this.form.rules.length&&!confirm('移除全部映射？')))return;this.busy=true;this.error='';try{await api('/api/publish',{id:this.id,base:this.base,plan:this.form});this.original=JSON.stringify(this.form);await this.refresh()}catch(e){this.error=e.message}finally{this.busy=false}},
+    openPair(){this.pair={Server:'',ServerIP:'',Client:'',ClientIP:''};this.pairError='';this.pairCmd=null;this.copied='';this.$refs.pairDialog.showModal()},
+    async createPair(){this.busy=true;this.pairError='';try{this.pairCmd=await api('/api/pair',this.pair);await this.refresh()}catch(e){this.pairError=e.message}finally{this.busy=false}},
+    async copyInstall(role){try{await navigator.clipboard.writeText(this.pairCmd[role]);this.copied=role}catch{this.pairError='请选中上方完整命令复制'}},
+    openRegister(){this.newRole='A';this.newID='';this.region='';this.regError='';this.token='';this.$refs.dialog.showModal()},
+    async register(){this.busy=true;try{this.token=(await api('/api/nodes',{id:this.newID,region:this.region,role:this.newRole})).token;await this.refresh()}catch(e){this.regError=e.message}finally{this.busy=false}}
+  },
+  mounted(){this.refresh();this.timer=setInterval(()=>this.refresh(),5000);window.addEventListener('beforeunload',e=>{if(this.dirty){e.preventDefault();e.returnValue=''}})},
+  beforeUnmount(){clearInterval(this.timer)}
+}).mount('#app')
+</script></body></html>
