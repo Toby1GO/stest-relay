@@ -34,5 +34,3 @@ v1.2.0 中心直接通过 HTTPS 提供脚本、节点程序和 SHA-256 校验清
 如需显示中心探测延迟，允许 C 访问 A 的入口及 B 的 8001。在 **全部节点** 确认 A、B 在线，进入 **转发规则** 选择 A、添加并发布映射，再用客户端连接 A 的 IP 和入口端口。
 
 服务名：C 为 `stest-center`，A 为 `stest-agent`，B 为 `stest-exit`。遇到启动问题可执行 `journalctl -u 服务名 -n 40 --no-pager`。安装脚本面向新服务器，不覆盖现有部署。
-
-基于 [j-jiang/socks5](https://gitee.com/j-jiang/socks5) 的 Go 移植，见 [LICENSE](LICENSE)。
