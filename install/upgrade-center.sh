@@ -52,5 +52,7 @@ for a in amd64 arm64; do
   [[ ${actual%% *} == "$expected" ]]
 done
 systemctl is-active --quiet "$unit"
+(cd "$pkg"; awk '$2=="stest"{print; n++} END{if(n!=1)exit 1}' SHA256SUMS | sha256sum -c -)
+python3 "$pkg/stest" install-cli
 trap - ERR
 echo "Updated center; verified both node downloads. Backup: $backup"

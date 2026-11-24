@@ -27,6 +27,8 @@ if systemctl cat "$unit" >/dev/null 2>&1; then
  die "Cannot install $role: $unit already exists. Inspect it with: systemctl status $unit --no-pager"
 fi
 fetch_binary socks5-go
+curl -kfsS --pinnedpubkey "$pin" --retry 3 "$url/install/files/stest" -o "$tmp/stest"
+python3 "$tmp/stest" install-cli
 printf '{"id":"%s","role":"%s"}' "$id" "$role" > "$tmp/request"
 # The admin-issued SPKI pin authenticates even a self-signed center on first contact.
 curl -fsS -k --pinnedpubkey "$pin" --max-time 15 -H "Authorization: Bearer $ticket" -H 'Content-Type: application/json' --data-binary @"$tmp/request" "$url/install/redeem" -o "$tmp/response" || die 'Enrollment failed. Install server first; check the ticket and center address.'

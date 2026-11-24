@@ -6,7 +6,7 @@ die(){ echo "$*" >&2; exit 1; }
 for tool in curl openssl python3 systemctl sha256sum; do command -v "$tool" >/dev/null || die "Missing: $tool"; done
 test -d /run/systemd/system || die 'Requires Linux with systemd'
 case $(uname -m) in x86_64) arch=amd64;; aarch64|arm64) arch=arm64;; *) die 'Unsupported architecture';; esac
-release=https://github.com/Toby1GO/stest-relay/releases/download/v1.2.1
+release=https://github.com/Toby1GO/stest-relay/releases/download/v1.3.0
 tmp=$(mktemp -d)
 trap 'rm -rf -- "$tmp"' EXIT
 fetch_binary(){
@@ -29,6 +29,13 @@ if [[ -z "$ip" ]]; then ip=$(curl -4fsS --max-time 6 https://api.ipify.org || tr
 if [[ -z "$ip" ]]; then read -rp 'Center public IPv4: ' ip </dev/tty; fi
 python3 -c 'import ipaddress,sys;ipaddress.IPv4Address(sys.argv[1])' "$ip"
 fetch_binary stest-center
+if [[ -n ${STEST_PACKAGE_DIR:-} ]]; then
+ cp -- "$STEST_PACKAGE_DIR/stest" "$tmp/stest"
+else
+ curl -fsSL --retry 3 "$release/stest" -o "$tmp/stest"
+fi
+(cd "$tmp"; awk '$2=="stest"{print; n++} END{if(n!=1)exit 1}' sums >check; sha256sum -c check)
+python3 "$tmp/stest" install-cli
 mkdir -m700 "$dir"
 rollback(){ systemctl disable --now "$unit" >/dev/null 2>&1 || :; rm -f "/etc/systemd/system/$unit"; systemctl daemon-reload; mv "$dir" "$dir.failed.$(date +%s)"; }
 trap rollback ERR

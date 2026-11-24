@@ -14,7 +14,7 @@ import (
 var files embed.FS
 
 func Ready() bool {
-	for _, name := range []string{"SHA256SUMS", "socks5-go-linux-amd64", "socks5-go-linux-arm64"} {
+	for _, name := range []string{"SHA256SUMS", "socks5-go-linux-amd64", "socks5-go-linux-arm64", "manifest.json", "manifest.sig", "stest"} {
 		if _, err := fs.Stat(files, "payload/"+name); err != nil {
 			return false
 		}
@@ -26,7 +26,7 @@ func Serve(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimPrefix(r.URL.Path, "/install/files/")
 	switch name {
 	case "node.sh":
-	case "SHA256SUMS", "socks5-go-linux-amd64", "socks5-go-linux-arm64":
+	case "SHA256SUMS", "socks5-go-linux-amd64", "socks5-go-linux-arm64", "manifest.json", "manifest.sig", "stest":
 		name = "payload/" + name
 	default:
 		http.NotFound(w, r)

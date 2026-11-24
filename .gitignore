@@ -19,6 +19,9 @@ meter-monthly.json
 dist/
 install/payload/socks5-go-linux-*
 install/payload/SHA256SUMS
+install/payload/stest
+install/payload/manifest.json
+install/payload/manifest.sig
 *_test.go
 !internal/center/install_delivery_test.go
 *.admin
