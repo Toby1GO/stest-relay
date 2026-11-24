@@ -6,7 +6,7 @@ die(){ echo "$*" >&2; exit 1; }
 for tool in curl openssl python3 systemctl sha256sum; do command -v "$tool" >/dev/null || die "Missing: $tool"; done
 test -d /run/systemd/system || die 'Requires Linux with systemd'
 case $(uname -m) in x86_64) arch=amd64;; aarch64|arm64) arch=arm64;; *) die 'Unsupported architecture';; esac
-release=https://github.com/Toby1GO/stest-relay/releases/download/v1.0.0
+release=https://github.com/Toby1GO/stest-relay/releases/download/v1.1.0
 tmp=$(mktemp -d)
 trap 'rm -rf -- "$tmp"' EXIT
 fetch_binary(){

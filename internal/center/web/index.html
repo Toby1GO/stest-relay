@@ -8,7 +8,7 @@
 <button v-for="(tab,i) in tabs" :key="tab" :class="{current:page===tab}" :aria-current="page===tab?'page':null" @click="page=tab"><i class="nav-icon" :class="'nav-'+i"></i>{{tab}}</button>
 <div class="rail-foot"><span class="avatar">C</span><div>管理中心<small>管理员工作区</small></div></div></nav>
 <div class="workspace"><div class="topline"><span>工作空间 <em>/</em> <b>{{page}}</b></span><time v-if="currentMonth">更新于 {{new Date(now).toLocaleTimeString('zh-CN',{hour12:false})}}</time></div>
-<header><h1>{{page}}</h1><div class="actions"><button @click="openRegister">手动接入</button><button class="primary" @click="openPair">＋ 安装一对节点</button></div></header>
+<header><h1>{{page}}</h1><div class="actions"><button @click="logout">退出登录</button><button @click="openRegister">手动接入</button><button class="primary" @click="openPair">＋ 安装一对节点</button></div></header>
 <div v-if="error" role="alert" class="error banner">{{error}}</div>
 <div class="summary" v-if="page==='网络总览'"><div v-for="(k,i) in metrics" :key="k[0]"><span class="stat-icon" :class="'ic-'+i" aria-hidden="true">{{['▦','◉','⇄','◷'][i]}}</span><small>{{k[0]}}</small><strong>{{currentMonth?k[1]:'—'}}</strong></div></div>
 <div class="dashboard overview" v-if="page==='网络总览'">
@@ -86,6 +86,7 @@ function convertLines(text){
 async function api(path, data) {
   const opts = data === undefined ? {} : {method:'POST',headers:{'Content-Type':'application/json','X-Center-Request':'1'},body:JSON.stringify(data)};
   const response = await fetch(path, opts);
+  if(response.status===401){location.replace('/login');throw Error('请重新登录')}
   if (!response.ok) throw Error((await response.text()).trim());
   return response.json();
 }
@@ -185,6 +186,7 @@ Vue.createApp({
     openPair(){this.pair={Server:'',ServerIP:'',Client:'',ClientIP:''};this.pairError='';this.pairCmd=null;this.copied='';this.$refs.pairDialog.showModal()},
     async createPair(){this.busy=true;this.pairError='';try{this.pairCmd=await api('/api/pair',this.pair);await this.refresh()}catch(e){this.pairError=e.message}finally{this.busy=false}},
     async copyInstall(role){try{await navigator.clipboard.writeText(this.pairCmd[role]);this.copied=role}catch{this.pairError='请选中上方完整命令复制'}},
+    async logout(){if(this.dirty&&!confirm('退出将放弃未发布的修改，继续？'))return;try{await api('/auth/logout',{});this.form=null;location.replace('/login')}catch(e){this.error=e.message}},
     openRegister(){this.newRole='A';this.newID='';this.region='';this.regError='';this.token='';this.$refs.dialog.showModal()},
     async register(){this.busy=true;try{this.token=(await api('/api/nodes',{id:this.newID,region:this.region,role:this.newRole})).token;await this.refresh()}catch(e){this.regError=e.message}finally{this.busy=false}}
   },

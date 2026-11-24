@@ -6,7 +6,7 @@ die(){ echo "$*" >&2; exit 1; }
 for tool in curl openssl python3 systemctl sha256sum; do command -v "$tool" >/dev/null || die "Missing: $tool"; done
 test -d /run/systemd/system || die 'Requires Linux with systemd'
 case $(uname -m) in x86_64) arch=amd64;; aarch64|arm64) arch=arm64;; *) die 'Unsupported architecture';; esac
-release=https://github.com/Toby1GO/stest-relay/releases/download/v1.0.0
+release=https://github.com/Toby1GO/stest-relay/releases/download/v1.1.0
 tmp=$(mktemp -d)
 trap 'rm -rf -- "$tmp"' EXIT
 fetch_binary(){
@@ -29,7 +29,7 @@ rollback(){ systemctl disable --now "$unit" >/dev/null 2>&1 || :; rm -f "/etc/sy
 trap rollback ERR
 cd "$dir";install -m755 "$tmp/stest-center-linux-$arch" stest-center
 openssl req -x509 -newkey rsa:3072 -sha256 -nodes -days 825 -subj "/CN=$ip" -addext "subjectAltName=IP:$ip" -keyout center.key -out center.crt 2>"$tmp/cert.log"
-printf 'SOCKS_CENTER_PASSWORD=%s\nSTEST_PUBLIC_URL=https://%s:8443\n' "$(openssl rand -hex 24)" "$ip" > admin.env
+printf 'STEST_PUBLIC_URL=https://%s:8443\n' "$ip" > admin.env
 cat >"/etc/systemd/system/$unit" <<UNIT
 [Unit]
 Description=STest center
@@ -48,11 +48,11 @@ UNIT
 systemctl daemon-reload;systemctl enable --now "$unit"
 ready=0
 for i in {1..10}; do
- if [[ $(curl --noproxy '*' --connect-to "$ip:8443:127.0.0.1:8443" --cacert center.crt -s -o /dev/null -w '%{http_code}' "https://$ip:8443/") == 401 ]] && systemctl is-active --quiet "$unit"; then ready=1;break;fi
+ if [[ $(curl --noproxy '*' --connect-to "$ip:8443:127.0.0.1:8443" --cacert center.crt -s -o /dev/null -w '%{http_code}' "https://$ip:8443/") == 303 ]] && systemctl is-active --quiet "$unit"; then ready=1;break;fi
  sleep 1
 done
 [[ $ready == 1 ]]
 trap - ERR
 echo "Panel: https://$ip:8443/    Username: admin"
-printf 'Password: '; sed -n 's/^SOCKS_CENTER_PASSWORD=//p' admin.env
+echo 'Initial password: admin (first login requires changing BOTH username and password)'
 openssl x509 -in center.crt -noout -fingerprint -sha256

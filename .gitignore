@@ -17,3 +17,5 @@ center-*-applied.json
 *.billing
 meter-monthly.json
 dist/
+*_test.go
+*.admin

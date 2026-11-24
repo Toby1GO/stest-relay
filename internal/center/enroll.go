@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-const installerURL = "https://raw.githubusercontent.com/Toby1GO/stest-relay/v1.0.0/install/node.sh"
+const installerURL = "https://raw.githubusercontent.com/Toby1GO/stest-relay/v1.1.0/install/node.sh"
 
 type enrollment struct {
 	Peer, Host, TicketHash, Tunnel, NodeKey, Certificate string

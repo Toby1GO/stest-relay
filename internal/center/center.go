@@ -60,7 +60,8 @@ type center struct {
 	mu                           sync.Mutex
 	nodes                        map[string]managedNode
 	live                         map[string]observed
-	path, password               string
+	path                         string
+	auth                         *sessions
 }
 
 func nonce() (string, error) {
@@ -116,10 +117,7 @@ func (c *center) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		c.sync(w, r)
 		return
 	}
-	u, p, ok := r.BasicAuth()
-	if !ok || u != "admin" || subtle.ConstantTimeCompare([]byte(digest(p)), []byte(digest(c.password))) != 1 {
-		w.Header().Set("WWW-Authenticate", `Basic realm="Node Center", charset="UTF-8"`)
-		http.Error(w, "请使用管理员账号登录", 401)
+	if !c.auth.gate(w, r) {
 		return
 	}
 	if r.URL.Path == "/console.css" && r.Method == "GET" {
@@ -357,7 +355,11 @@ func New(path, password string) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &center{book: ledger, probes: map[string]probe{}, path: path, password: password, nodes: map[string]managedNode{}, live: map[string]observed{}}
+	auth, e := openSessions(path+".admin", password)
+	if e != nil {
+		return nil, e
+	}
+	c := &center{book: ledger, probes: map[string]probe{}, path: path, auth: auth, nodes: map[string]managedNode{}, live: map[string]observed{}}
 	b, e := os.ReadFile(path)
 	if e == nil {
 		if e = json.Unmarshal(b, &c.nodes); e != nil {
@@ -381,9 +383,6 @@ func Run(ctx context.Context, args []string) error {
 		return e
 	}
 	pw := os.Getenv("SOCKS_CENTER_PASSWORD")
-	if len(pw) < 12 {
-		return errors.New("请设置至少 12 字节的 SOCKS_CENTER_PASSWORD")
-	}
 	host, _, e := net.SplitHostPort(*addr)
 	if e != nil {
 		return e
