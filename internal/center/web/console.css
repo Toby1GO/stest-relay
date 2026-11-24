@@ -193,22 +193,36 @@ dialog {max-height:calc(100dvh - 32px);overflow:auto}
   dialog input,dialog select,dialog button {width:100%}
 }
 
-.inventory {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));gap:14px}
-.asset {min-width:0;border:1px solid var(--line);border-radius:12px;padding:16px;overflow-wrap:anywhere}
-.asset dl {display:grid;grid-template-columns:auto minmax(0,1fr);gap:5px 12px}
+.node-directory {padding:0;border:0;background:transparent;box-shadow:none}
+.inventory {
+  display:grid;
+  grid-template-columns:repeat(auto-fill,min(100%,256px));
+  align-items:start;
+  gap:14px;
+}
+.asset {
+  min-width:0;padding:12px;background:white;border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 2px 5px #15264a0d;overflow-wrap:anywhere;font-size:13px;
+}
+.asset .rule-head {gap:8px}
+.asset .chip {width:25px;height:25px;border-radius:7px;font-size:12px}
+.asset dl {display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 8px;margin:10px 0}
 .asset dt {color:var(--muted)}.asset dd {margin:0}
 .asset dd {text-align:right;font-variant-numeric:tabular-nums}
 .asset .rule-head .badge {margin-left:auto}
-.traffic,.asset-buttons {display:grid;gap:8px;margin:12px 0;grid-template-columns:repeat(2,minmax(0,1fr))}
-.traffic div {border-radius:8px;background:#ecf4ff;color:#1957a0;padding:10px;text-align:center;font-size:12px}
+.traffic,.asset-buttons {display:grid;gap:6px;margin:8px 0;grid-template-columns:repeat(2,minmax(0,1fr))}
+.traffic div {border-radius:8px;background:#ecf4ff;color:#1957a0;padding:6px;text-align:center;font-size:12px}
 .traffic div+div,.asset-buttons button:first-child {background:#e5f6ed;color:#176942}
 .traffic b {display:block;font-size:15px}
 .asset-buttons {grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:0}
 .asset-buttons button:nth-child(2){background:#edf4ff;color:#1957a0}
 .asset-buttons .danger {background:#ffedf0;color:#982d47}
-.asset summary {cursor:pointer}.asset .actions {margin-top:12px}
+.asset summary {cursor:pointer}
+.asset .subtle {padding:4px 0}
+.asset-buttons button {padding:5px 3px;font-size:13px}
 .nav-3::after {inset:3px;border-block:1px solid currentColor}
-@media(max-width:640px){.rail button{padding-inline:1px}.asset .actions button{flex:1}}
+@media(max-width:640px){.rail button{padding-inline:1px}}
+@media(max-width:550px){.inventory {grid-template-columns:minmax(0,1fr)}}
 .rules-page {display:block}
 .node-bar,.node-bar label,.bulkbar,.bulkbar label {display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .node-bar {padding:12px 16px}.node-bar label {font-weight:600}

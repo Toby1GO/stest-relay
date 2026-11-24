@@ -7,7 +7,7 @@
 准备一台全新的 Linux amd64 / arm64 服务器，使用 systemd，并安装 bash、curl、OpenSSL 1.1.1+、Python 3 和 sha256sum。在 **C 的 root 终端**执行：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Toby1GO/stest-relay/v1.2.0/install/center.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Toby1GO/stest-relay/v1.2.1/install/center.sh | bash
 ```
 
 脚本打印 HTTPS 地址和证书指纹。若自动识别的出口 IP 不是面板入口，安装时将末尾改为 `bash -s -- 你的公网IPv4`。使用自签证书时，首次访问请核对终端中的指纹。
@@ -18,9 +18,9 @@ curl -fsSL https://raw.githubusercontent.com/Toby1GO/stest-relay/v1.2.0/install/
 
 在面板点击 **安装一对节点**，填写 A、B 的标识和公网 IPv4。先在 **B 的 root 终端**运行 server 命令；成功后，再在 **A 的 root 终端**运行 client 命令。
 
-v1.2.0 中心直接通过 HTTPS 提供脚本、节点程序和 SHA-256 校验清单。节点安装时只需能访问中心，无需访问 GitHub。关闭弹窗、复制丢失或命令过期后，进入 **全部节点 → 对应节点 → 安装**，即可签发有效期两小时的新命令。只有该节点之前的安装命令失效，不影响已上线的另一端。已安装节点和手动接入节点不提供首次安装命令。
+v1.2.1 中心直接通过 HTTPS 提供脚本、节点程序和 SHA-256 校验清单。节点安装时只需能访问中心，无需访问 GitHub。关闭弹窗、复制丢失或命令过期后，进入 **全部节点 → 对应节点 → 安装**，即可签发有效期两小时的新命令。只有该节点之前的安装命令失效，不影响已上线的另一端。已安装节点和手动接入节点不提供首次安装命令。
 
-若中心机器也无法访问 GitHub，可用另一台机器从 [v1.2.0 Release](https://github.com/Toby1GO/stest-relay/releases/tag/v1.2.0) 下载与中心架构匹配的 `stest-center-kit-amd64.tar.gz` 或 `stest-center-kit-arm64.tar.gz`，传到中心并解压。在解压目录以 root 运行 `STEST_PACKAGE_DIR="$PWD" bash ./center.sh 你的公网IPv4`。两种中心包都能安装任一架构的节点。
+若中心机器也无法访问 GitHub，可用另一台机器从 [v1.2.1 Release](https://github.com/Toby1GO/stest-relay/releases/tag/v1.2.1) 下载与中心架构匹配的 `stest-center-kit-amd64.tar.gz` 或 `stest-center-kit-arm64.tar.gz`，传到中心并解压。在解压目录以 root 运行 `STEST_PACKAGE_DIR="$PWD" bash ./center.sh 你的公网IPv4`。两种中心包都能安装任一架构的节点。
 
 ### 3. 开放端口并验证
 
